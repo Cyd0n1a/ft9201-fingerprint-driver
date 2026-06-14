@@ -76,7 +76,7 @@ init_ssm_state (FpiSsm *ssm, FpDevice *device)
     fp_dbg ("Sending wakeup payload...");
     transfer = fpi_usb_transfer_new (device);
     
-    /* TODO: AMANDA - Replace this with the control transfer parameters 
+    /* TODO: Replace this with the control transfer parameters 
        found in the kernel module's initialization sequence. */
     fpi_usb_transfer_fill_control (transfer,
                                    G_USB_DEVICE_DIRECTION_HOST_TO_DEVICE,
@@ -172,7 +172,7 @@ capture_interrupt_cb (FpiUsbTransfer *transfer, FpDevice *device,
     return;
   }
 
-  /* TODO: AMANDA - Inspect transfer->buffer to see if the interrupt packet 
+  /* TODO: Inspect transfer->buffer to see if the interrupt packet 
      actually signifies a finger press. Often devices send keep-alives. 
      If it's just a keep-alive, resubmit the interrupt transfer here. */
 
