@@ -59,7 +59,7 @@
  * FocalTech FT9201 Fingerprint Reader — libfprint User-Space Driver
  * USB ID: 2808:93a9  (FT9361 sensor variant)
  *
- * Copyright (C) 2024-2026 Amanda Hariette-Scott - Cydonia@Cydonis Heavy Industries (cydonis.co.uk) & Contributors.
+ * Copyright (C) 2024-2026 Amanda Hariette-Scott - Cyd0n1a@Cydonis Heavy Industries (cydonis.co.uk) <inquiries.chi.ltd@proton.me> & Contributors.
  * Ported from the Linux kernel module by Mak Krnic <mak@banianitc.com>
  * Kernel source: https://github.com/banianitc/ft9201-fingerprint-driver
  *
