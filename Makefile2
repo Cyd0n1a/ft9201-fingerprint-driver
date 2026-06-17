@@ -1,0 +1,155 @@
+# Makefile for the FT9201 libfprint driver
+#
+# libfprint itself builds with Meson + Ninja — there is no standalone
+# `gcc` path for a single driver, since drivers_api.h and the Fpi*
+# symbols only resolve inside libfprint's own build tree. This Makefile
+# is a thin convenience wrapper: it stages ft9201.c into a libfprint
+# checkout and drives meson/ninja for you.
+#
+# Quick start:
+#   make LIBFPRINT_SRC=~/src/libfprint stage build
+#   make LIBFPRINT_SRC=~/src/libfprint install   # needs sudo for system prefix
+#
+# If you don't have a libfprint checkout yet:
+#   make fetch-libfprint
+
+SHELL        := /bin/bash
+
+# Path to a libfprint git checkout. Override on the command line or export
+# it in your environment: `export LIBFPRINT_SRC=/path/to/libfprint`
+LIBFPRINT_SRC ?= libfprint
+
+DRIVER_FILE   := ft9201.c
+DRIVER_SRC    := $(DRIVER_FILE)
+DRIVER_DEST   := $(LIBFPRINT_SRC)/libfprint/drivers/$(DRIVER_FILE)
+
+# The three places a new driver needs registering, verified against an
+# actual libfprint checkout (libfprint/drivers/meson.build does NOT exist —
+# an earlier version of this Makefile assumed it did):
+#   - top-level meson.build:    default_drivers list
+#   - libfprint/meson.build:    driver name -> source file(s) dict
+#   - tests/meson.build:        drivers_tests list (umockdev fixture wiring)
+TOP_MESON     := $(LIBFPRINT_SRC)/meson.build
+DRIVERS_MESON := $(LIBFPRINT_SRC)/libfprint/meson.build
+TESTS_MESON   := $(LIBFPRINT_SRC)/tests/meson.build
+
+TEST_DIR_SRC  := tests/ft9201
+TEST_DIR_DEST := $(LIBFPRINT_SRC)/tests/ft9201
+
+BUILD_DIR     := $(LIBFPRINT_SRC)/build
+NPROC         := $(shell nproc 2>/dev/null || echo 4)
+
+# Optional variant name for record-test, e.g. `make record-test VARIANT=v2`
+VARIANT       ?=
+
+.PHONY: help fetch-libfprint stage register configure build install test record-test clean distclean
+
+help:
+	@echo "FT9201 libfprint driver — build targets"
+	@echo ""
+	@echo "  make fetch-libfprint   Clone libfprint into ./libfprint (skip if you have a checkout)"
+	@echo "  make stage             Copy $(DRIVER_FILE) and tests/ft9201/ into the libfprint tree"
+	@echo "  make register          Check whether the 3 meson.build files list ft9201 (manual if not)"
+	@echo "  make configure         meson setup $(BUILD_DIR)"
+	@echo "  make build             ninja -C $(BUILD_DIR)"
+	@echo "  make install           ninja -C $(BUILD_DIR) install"
+	@echo "  make test              Run libfprint's test suite (meson test)"
+	@echo "  make record-test       Record a real umockdev fixture from hardware (needs root + tshark)"
+	@echo "  make clean             Remove the meson build directory"
+	@echo "  make distclean         clean + remove the staged driver file"
+	@echo ""
+	@echo "Override the checkout path with LIBFPRINT_SRC=/path/to/libfprint"
+	@echo "Pass VARIANT=name to record-test for a hardware variant, e.g. VARIANT=v2"
+
+# ── Optional: grab a libfprint checkout if the caller doesn't have one ─────
+fetch-libfprint:
+	@if [ -d "$(LIBFPRINT_SRC)/.git" ]; then \
+		echo "libfprint already present at $(LIBFPRINT_SRC)"; \
+	else \
+		git clone --depth 1 https://gitlab.freedesktop.org/libfprint/libfprint.git "$(LIBFPRINT_SRC)"; \
+	fi
+
+# ── Stage the driver source + test fixture dir into the libfprint tree ─────
+stage: $(DRIVER_DEST) $(TEST_DIR_DEST)/README.md
+
+$(DRIVER_DEST): $(DRIVER_SRC)
+	@if [ ! -d "$(LIBFPRINT_SRC)" ]; then \
+		echo "error: LIBFPRINT_SRC='$(LIBFPRINT_SRC)' not found."; \
+		echo "Run 'make fetch-libfprint' or pass LIBFPRINT_SRC=/path/to/libfprint"; \
+		exit 1; \
+	fi
+	cp $(DRIVER_SRC) $(DRIVER_DEST)
+	@echo "Staged $(DRIVER_FILE) -> $(DRIVER_DEST)"
+
+$(TEST_DIR_DEST)/README.md: $(TEST_DIR_SRC)/README.md
+	@mkdir -p $(TEST_DIR_DEST)
+	cp $(TEST_DIR_SRC)/README.md $(TEST_DIR_DEST)/README.md
+	@echo "Staged tests/ft9201/README.md -> $(TEST_DIR_DEST)/ (no capture fixture yet — see that README)"
+
+# ── Sanity check: is the driver actually wired into the build? ─────────────
+# Does NOT edit any of these meson.build files for you — verified against
+# an actual libfprint checkout, but your checkout's exact line content may
+# differ slightly, and a blind sed edit risks a diff a human reviewer
+# wouldn't recognize. tests/ft9201/README.md has the exact snippets.
+register: stage
+	@ok=1; \
+	if grep -q "'ft9201'" "$(TOP_MESON)" 2>/dev/null; then \
+		echo "OK   $(TOP_MESON): 'ft9201' is in default_drivers"; \
+	else \
+		echo "TODO $(TOP_MESON): add 'ft9201' to the default_drivers list"; \
+		ok=0; \
+	fi; \
+	if grep -q "ft9201.c" "$(DRIVERS_MESON)" 2>/dev/null; then \
+		echo "OK   $(DRIVERS_MESON): ft9201.c is in the driver sources dict"; \
+	else \
+		echo "TODO $(DRIVERS_MESON): add 'ft9201' : [ 'drivers/ft9201.c' ], to the sources dict"; \
+		ok=0; \
+	fi; \
+	if grep -q "'ft9201'" "$(TESTS_MESON)" 2>/dev/null; then \
+		echo "OK   $(TESTS_MESON): 'ft9201' is in drivers_tests"; \
+	else \
+		echo "TODO $(TESTS_MESON): add 'ft9201' to the drivers_tests list"; \
+		ok=0; \
+	fi; \
+	if [ "$$ok" = "0" ]; then \
+		echo ""; \
+		echo "Exact snippets for each TODO above are in tests/ft9201/README.md"; \
+		echo "('Registering the test' section). Re-run 'make configure build' once added."; \
+	fi
+
+# ── Standard Meson/Ninja flow ────────────────────────────────────────────
+configure: stage
+	meson setup $(BUILD_DIR) $(LIBFPRINT_SRC) --reconfigure
+
+build: configure
+	ninja -C $(BUILD_DIR) -j$(NPROC)
+
+install: build
+	ninja -C $(BUILD_DIR) install
+
+test: build
+	meson test -C $(BUILD_DIR) --print-errorlogs
+
+# ── Record a real umockdev fixture from physical hardware ──────────────────
+# Needs: ft9201 actually plugged in, root (reads /dev/bus/usb/... and runs
+# tshark), and tshark installed. Depends on `build` because the recording
+# tool is templated by Meson into the build dir, and it loads libfprint via
+# LD_LIBRARY_PATH/GI_TYPELIB_PATH pointed at that same build dir — a stale
+# build means it would be testing the wrong code. See tests/ft9201/README.md
+# for what this produces and why it can't be faked.
+record-test: build
+	@if [ ! -f "$(BUILD_DIR)/tests/create-driver-test.py" ]; then \
+		echo "error: $(BUILD_DIR)/tests/create-driver-test.py not found."; \
+		echo "It's only generated when Meson's 'introspection' option is enabled"; \
+		echo "(the default). Check your build log, or re-run:"; \
+		echo "  meson setup $(BUILD_DIR) $(LIBFPRINT_SRC) --reconfigure -Dintrospection=enabled"; \
+		exit 1; \
+	fi
+	sudo $(BUILD_DIR)/tests/create-driver-test.py ft9201 $(VARIANT)
+
+clean:
+	rm -rf $(BUILD_DIR)
+
+distclean: clean
+	rm -f $(DRIVER_DEST)
+	rm -rf $(TEST_DIR_DEST)
