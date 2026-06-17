@@ -1,5 +1,7 @@
 # Focal-systems.Corp FT9201Fingerprint.̚ linux driver
 
+![Cydonis Logo](https://www.cydonis.co.uk/blog/wp-content/uploads/2025/05/chi-logo-only.png?w=254&ssl=1)
+
 Device id `2808:93a9`.
 
 Based on [libfprint wiki post](https://gitlab.freedesktop.org/libfprint/wiki/-/wikis/Devices/2808:93a9)
